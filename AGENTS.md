@@ -1,0 +1,64 @@
+# AGENTS.md — sbt-control-plane
+
+## Purpose
+Control plane for the multi-tenant EHR SaaS demo. Uses AWS SaaS Builder Toolkit (`@cdklabs/sbt-aws`) for tenant management, a custom feature-flag service (DynamoDB + Lambda + HTTP API) for tier/override management, and a React SPA admin portal (Spanish UI). Tenants are onboarded via SBT's `ProvisioningScriptJob` which runs `cdk deploy` of the tenant stack from the `ehr-tenant-app` repo.
+
+## Directory Map
+```
+├── bin/control-plane.ts             # CDK app wiring 4 stacks
+├── lib/
+│   ├── dns-foundation-stack.ts     # Hosted zone + delegation + wildcard ACM + SSM
+│   ├── control-plane-stack.ts      # sbt.CognitoAuth + sbt.ControlPlane + FeatureService
+│   ├── constructs/feature-service.ts # DDB + Lambda + HTTP API (JWT authorizer)
+│   ├── app-plane-stack.ts          # CoreApplicationPlane + Provisioning/Deprovisioning jobs
+│   └── admin-portal-stack.ts       # S3 + CloudFront + Route53 alias
+├── src/feature-service/handler.ts   # Lambda: GET/PUT tenant-features, emits EventBridge
+├── scripts/
+│   ├── provision-tenant.sh          # CodeBuild bash: bootstrap Node/PHP, cdk deploy
+│   ├── deprovision-tenant.sh        # CodeBuild bash: cdk destroy
+│   └── write-portal-config.sh       # Upload config.json to portal bucket
+├── portal/                          # Vite + React + Tailwind (Spanish)
+│   ├── src/pages/{TenantsPage,OnboardPage,TenantDetailPage,LoginPage}.tsx
+│   └── src/main.tsx                 # Amplify v6 auth + routing
+├── test/control-plane.test.ts       # Jest: 4 synth-assertion tests
+├── cdk.json                         # Context: adminEmail, tenantInfraVersion
+└── tsconfig.json
+```
+
+## Build & Test Commands
+```bash
+npm install                     # All CDK + dev deps
+npx tsc --noEmit               # TypeScript compilation check
+npm test                        # Jest (4 tests — may need Docker for synth)
+npx cdk synth --all             # Full synth (REQUIRES Docker)
+npm --prefix portal install     # Portal deps
+npm --prefix portal run build   # Portal build → portal/dist/
+```
+
+## Architecture Rules
+1. **SBT version**: v0.9.5 (check `node_modules/@cdklabs/sbt-aws` for APIs — do not guess).
+2. **Never SSM lookups at synth** — cross-stack references use object props, not SSM. SSM is for runtime (provisioning shell scripts read params with `aws ssm`).
+3. **UI Spanish, code English** — Portal pages use Spanish labels; all TS/JS use English.
+4. **Admin email** is REQUIRED as CDK context (`--context adminEmail=...`). Default in `cdk.json`.
+5. **Provisioning script** is a bash file (`scripts/provision-tenant.sh`) passed to `ProvisioningScriptJob.script`. It boots up Node 20 + PHP + Composer, downloads the tenant app artifact, runs `cdk deploy`, creates the tenant admin Cognito user, and invokes the artisan Lambda for migrations + initial feature sync.
+6. **Deprovisioning script** empties the S3 bucket then runs `cdk destroy --force`.
+7. **DEMO-ONLY permissions**: the provisioning CodeBuild role has `actions:* resources:*`. Replace with least privilege for production.
+8. **Event bus**: SBT creates a custom event bus. Bus name is written to SSM `/sbt-demo-ehr/event-bus-name`. The tenant stack reads it from context (provisioning passes it).
+9. **Custom event** `TenantFeatureUpdated` is emitted by the feature-service Lambda (source: `controlPlaneEventSource`). The tenant EventBridge rule ignores it; only matches its own `detail.tenantId`. Detail: `{tenantId, tier, overridesB64}` where `overridesB64` is base64(JSON(array-of-feature-keys)).
+
+## Feature Catalog
+The tier matrix is **duplicated** in both `src/feature-service/handler.ts` (for the admin portal) and `ehr-tenant-app/config/features.php` (source of truth). If you change the matrix, update both places AND the contract below.
+
+## Contract (must match ehr-tenant-app)
+See the SHARED CONTRACT in the ehr-tenant-app AGENTS.md. The key intersection points:
+- `tenantConfig` JSON exported by provisioning: `{userPoolId, appClientId, cognitoDomain, apiUrl, bucketName, subdomain}`
+- Tenant stack outputs (read by provisioning from `outputs.json`): `UserPoolId`, `AppClientId`, `CognitoDomain`, `ApiUrl`, `BucketName`, `Subdomain`, `ArtisanFunctionName`, `WebFunctionName`
+- CDK context values passed by provisioning: `tenantId`, `tenantName`, `subdomain`, `tier`, `adminEmail`, `hostedZoneId`, `rootDomain`, `wildcardCertificateArn`, `eventBusName`
+- RDS Proxy endpoint: injected via environment variable `DB_HOST` at CDK deploy
+
+## Deploy Order
+1. DnsFoundationStack (zone + cert)
+2. ControlPlaneStack (auth + API + feature-service)
+3. Upload tenant artifact (ehr-tenant-app/scripts/package-infra.sh)
+4. AppPlaneStack (provisioning jobs)
+5. AdminPortalStack + write-portal-config.sh
