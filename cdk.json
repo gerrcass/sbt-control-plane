@@ -1,0 +1,11 @@
+{
+  "app": "npx tsx bin/control-plane.ts",
+  "watch": {
+    "include": ["**"],
+    "exclude": ["node_modules", "cdk.out", "build", "portal"]
+  },
+  "context": {
+    "adminEmail": "gerrcass@gmail.com",
+    "tenantInfraVersion": "1.0.0"
+  }
+}

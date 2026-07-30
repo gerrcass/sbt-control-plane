@@ -1,0 +1,7 @@
+node_modules/
+cdk.out/
+build/
+portal/dist/
+portal/node_modules/
+.DS_Store
+*.tsbuildinfo
