@@ -15,6 +15,7 @@ export class SbtEhrControlPlaneStack extends cdk.Stack {
   public readonly cognitoAuth: sbt.CognitoAuth;
   public readonly controlPlane: sbt.ControlPlane;
   public readonly featureService: TenantFeatureService;
+  public readonly cognitoAdminDomain: string;
 
   constructor(scope: Construct, id: string, props: SbtEhrControlPlaneStackProps) {
     super(scope, id, props);
@@ -23,12 +24,6 @@ export class SbtEhrControlPlaneStack extends cdk.Stack {
       enableAdvancedSecurityMode: false,
       setAPIGWScopes: false,
       controlPlaneCallbackURL: 'https://admin.pruebas.aws.gerardocastillo.me/',
-    });
-
-    // Hosted UI domain for the admin user pool
-    new cognito.UserPoolDomain(this, 'AdminDomain', {
-      userPool: this.cognitoAuth.userPool,
-      cognitoDomain: { domainPrefix: `sbt-ehr-admin-${this.account}` },
     });
 
     this.controlPlane = new sbt.ControlPlane(this, 'ControlPlane', {
@@ -50,6 +45,9 @@ export class SbtEhrControlPlaneStack extends cdk.Stack {
     });
     this.controlPlane.eventManager.grantPutEventsTo(this.featureService.handler);
 
+    const sbtDomain = this.cognitoAuth.node.findChild('UserPoolDomain') as cognito.UserPoolDomain;
+    this.cognitoAdminDomain = `${sbtDomain.domainName}.auth.${this.region}.amazoncognito.com`;
+
     new cdk.CfnOutput(this, 'UserPoolId', {
       value: this.cognitoAuth.userPool.userPoolId,
     });
@@ -57,7 +55,7 @@ export class SbtEhrControlPlaneStack extends cdk.Stack {
       value: this.cognitoAuth.userClientId,
     });
     new cdk.CfnOutput(this, 'CognitoDomain', {
-      value: `sbt-ehr-admin-${this.account}.auth.${this.region}.amazoncognito.com`,
+      value: this.cognitoAdminDomain,
     });
     new cdk.CfnOutput(this, 'ControlPlaneApiUrl', {
       value: this.controlPlane.controlPlaneAPIGatewayUrl,

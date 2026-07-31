@@ -45,7 +45,7 @@ const adminPortal = new SbtEhrAdminPortalStack(app, 'SbtEhrAdminPortalStack', {
   certificate: dns.certificate,
   userPoolId: controlPlane.cognitoAuth.userPool.userPoolId,
   userPoolClientId: controlPlane.cognitoAuth.userClientId,
-  cognitoDomain: `sbt-ehr-admin-${env.account}.auth.${env.region}.amazoncognito.com`,
+  cognitoDomain: controlPlane.cognitoAdminDomain,
   controlPlaneApiUrl: controlPlane.controlPlane.controlPlaneAPIGatewayUrl,
   featureApiUrl: controlPlane.featureService.api.apiEndpoint,
 });
