@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as sbt from '@cdklabs/sbt-aws';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
 import { Construct } from 'constructs';
 import { TenantFeatureService } from './constructs/feature-service';
 
@@ -29,6 +30,11 @@ export class SbtEhrControlPlaneStack extends cdk.Stack {
     this.controlPlane = new sbt.ControlPlane(this, 'ControlPlane', {
       auth: this.cognitoAuth,
       systemAdminEmail: props.adminEmail,
+      apiCorsConfig: {
+        allowOrigins: ['https://admin.pruebas.aws.gerardocastillo.me', 'http://localhost:5173'],
+        allowHeaders: ['authorization', 'content-type', 'x-amz-date', 'x-amz-security-token'],
+        allowMethods: [apigw.CorsHttpMethod.GET, apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.PUT, apigw.CorsHttpMethod.DELETE, apigw.CorsHttpMethod.OPTIONS],
+      },
     });
 
     // Event bus name to SSM
