@@ -13,6 +13,7 @@ Plano de control del demo SaaS EHR. Orquesta el onboarding de tenants, gestiona 
 ┌─ ControlPlaneStack ───────┼──────────────────────────────────┐
 │  sbt.CognitoAuth (admin pool) + sbt.ControlPlane (API REST)  │
 │  TenantFeatureService (DynamoDB + Lambda + HTTP API)         │
+│  CORS habilitado para el portal admin                         │
 │  EventBus → SSM → /sbt-demo-ehr/event-bus-name               │
 └────────────────────────────┼──────────────────────────────────┘
 ┌─ AppPlaneStack ───────────┼──────────────────────────────────┐
@@ -37,6 +38,7 @@ Plano de control del demo SaaS EHR. Orquesta el onboarding de tenants, gestiona 
 
 ```bash
 npm install
+cdk bootstrap
 
 # 1. DNS Foundation
 npx cdk deploy SbtEhrDnsFoundationStack
@@ -65,7 +67,7 @@ bash scripts/write-portal-config.sh
 
 ## Flujo de demo
 
-1. Abrir `https://admin.pruebas.aws.gerardocastillo.me` → login con Cognito (credenciales del email configurado).
+1. Abrir `https://admin.pruebas.aws.gerardocastillo.me` → login con Cognito (credenciales del email configurado, cambiar contraseña al primer ingreso).
 2. **Nuevo tenant** → nombre "Clínica Alfa", email del admin, plan "Básico".
 3. Esperar ~15-20 min (provisionamiento: VPC + Aurora + Cognito + Lambda).
 4. El tenant aparece como "Activo" con su URL `https://clinica-alfa-xxxxx.pruebas.aws.gerardocastillo.me`.
@@ -80,8 +82,28 @@ bash scripts/write-portal-config.sh
 
 La Feature Service emite este evento al bus de SBT cada vez que un administrador guarda cambios de plan o anulaciones.
 
+## Decisiones técnicas importantes
+
+- **CORS en la API del Control Plane**: Configurado para permitir `https://admin.pruebas.aws.gerardocastillo.me` y `http://localhost:5173`. Sin CORS, el portal admin no puede llamar a la API desde el navegador.
+- **Dominio de Cognito**: SBT's `CognitoAuth` ya crea su propio `UserPoolDomain`. No agregar uno duplicado — usar el existente vía `cognitoAuth.node.findChild('UserPoolDomain')`. El dominio completo se forma como `<prefix>.auth.<region>.amazoncognito.com`.
+- **Portal config.json**: Se inyecta después del deploy con `scripts/write-portal-config.sh`. No incluir `config.json` en el `aws s3 sync --delete` del portal o se borrará.
+- **API Gateway doble slash**: El `apiUrl` del Control Plane incluye `/` al final. El portal debe hacer `apiUrl.replace(/\/+$/, '')` antes de concatenar con el path.
+- **Portal error handling**: Las llamadas a la API deben tener manejo de errores (`.catch`) para evitar estados "Cargando..." eternos.
+- **Provisioning script**: El script de bash descargado por CodeBuild necesita Node ≥ 20, PHP, Composer y AWS CLI. Usa `runtime-versions: nodejs latest` en el buildspec generado por SBT, y el script instala PHP/Composer vía apt si no están presentes.
+
 ## Costos
 
 - Control Plane (sin tenants activos): ~$15-20/mes (Lambdas, API Gateway, DynamoDB, CloudFront, S3)
-- Cada tenant activo: ~$65/mes (Aurora, NAT instance, RDS Proxy)
+- Cada tenant activo: ~$52/mes (Aurora MySQL, NAT instance, Lambda, S3, Cognito)
 - El provisioning/deprovisioning usa CodeBuild bajo demanda (~$0.005/min, típicamente < $2 por operación)
+
+## Teardown
+
+```bash
+npx cdk destroy SbtEhrAdminPortalStack
+npx cdk destroy SbtEhrAppPlaneStack
+npx cdk destroy SbtEhrControlPlaneStack
+npx cdk destroy SbtEhrDnsFoundationStack
+```
+
+Si `SbtEhrDnsFoundationStack` falla con `HostedZoneNotEmptyException`, eliminar manualmente los registros CNAME de validación ACM de la zona antes de reintentar.
