@@ -48,13 +48,14 @@ npx cdk deploy SbtEhrDnsFoundationStack
 npx cdk deploy SbtEhrControlPlaneStack --context adminEmail=tu-email@ejemplo.com
 # El admin de Cognito recibe un email con la contraseña temporal
 
-# 3. Subir artefacto del tenant (desde el otro repo: ehr-tenant-app)
-export ARTIFACTS_BUCKET=sbt-demo-ehr-artifacts-772961519025
+# 3. App Plane (creates the S3 artifacts bucket + provisioning/deprovisioning jobs)
+npx cdk deploy SbtEhrAppPlaneStack
+
+# 4. Subir artefacto del tenant (desde el otro repo: ehr-tenant-app)
+#    NOTA: debe ejecutarse después del paso 3 porque el bucket lo crea AppPlaneStack
+export ARTIFACTS_BUCKET=sbt-demo-ehr-artifacts-$(aws sts get-caller-identity --query Account --output text)
 export APP_VERSION=1.0.0
 cd ../ehr-tenant-app && bash scripts/package-infra.sh
-
-# 4. App Plane (provisioning/deprovisioning jobs)
-npx cdk deploy SbtEhrAppPlaneStack
 
 # 5. Construir y subir el portal
 npm --prefix portal install

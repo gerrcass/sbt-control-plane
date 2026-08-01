@@ -62,8 +62,8 @@ The tier matrix is **duplicated** in both `src/feature-service/handler.ts` (for 
 ## Deploy Order
 1. DnsFoundationStack (zone + cert)
 2. ControlPlaneStack (auth + API + feature-service)
-3. Upload tenant artifact (ehr-tenant-app/scripts/package-infra.sh)
-4. AppPlaneStack (provisioning jobs)
+3. AppPlaneStack (creates the artifacts S3 bucket + provisioning jobs)
+4. Upload tenant artifact (ehr-tenant-app/scripts/package-infra.sh — requires the bucket from step 3)
 5. Portal build (`npm --prefix portal run build`)
 6. AdminPortalStack + write-portal-config.sh
 

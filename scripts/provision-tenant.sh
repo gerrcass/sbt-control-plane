@@ -111,7 +111,7 @@ invoke_console() {
 
 wait_for_lambda() {
   for i in $(seq 1 6); do
-    invoke_console '{"command":"migrate --force --seed"}'
+    invoke_console '{"cli":"migrate --force --seed"}'
     if jq -e '.FunctionError' /tmp/console_result.json > /dev/null 2>&1; then
       echo "Migration attempt ${i} failed (Aurora may still be warming up); waiting 30s..."
       sleep 30
@@ -126,7 +126,7 @@ wait_for_lambda() {
 
 wait_for_lambda
 
-invoke_console "{\"command\":\"sbt:sync-tenant-features --tenant-id=${tenantId} --tier=${tier}\"}"
+invoke_console "{\"cli\":\"sbt:sync-tenant-features --tenant-id=${tenantId} --tier=${tier}\"}"
 echo "Initial feature sync dispatched."
 
 # ------------------------------------------------------------------
