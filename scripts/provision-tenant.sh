@@ -147,3 +147,10 @@ export tenantStatus="created"
 echo "========== TENANT PROVISIONED: ${tenantId} =========="
 echo "tenantConfig=${tenantConfig}"
 echo "tenantStatus=${tenantStatus}"
+
+# Warm up the Lambda so the first user login doesn't hit a cold VPC ENI
+echo "[provision-tenant] Warming up the tenant Lambda (VPC ENI cold-start)..."
+for i in 1 2 3; do
+  curl -s -o /dev/null --max-time 5 "$API_URL" || true
+  echo "[provision-tenant] Warm-up attempt $i done"
+done
