@@ -55,7 +55,7 @@ npx cdk deploy SbtEhrAppPlaneStack
 #    NOTA: debe ejecutarse después del paso 3 porque el bucket lo crea AppPlaneStack
 export ARTIFACTS_BUCKET=sbt-demo-ehr-artifacts-$(aws sts get-caller-identity --query Account --output text)
 export APP_VERSION=1.0.0
-cd ../ehr-tenant-app && bash scripts/package-infra.sh
+bash ../ehr-tenant-app/scripts/package-infra.sh
 
 # 5. Construir y subir el portal
 npm --prefix portal install
