@@ -91,11 +91,14 @@ La Feature Service emite este evento al bus de SBT cada vez que un administrador
 - **API Gateway doble slash**: El `apiUrl` del Control Plane incluye `/` al final. El portal debe hacer `apiUrl.replace(/\/+$/, '')` antes de concatenar con el path.
 - **Portal error handling**: Las llamadas a la API deben tener manejo de errores (`.catch`) para evitar estados "Cargando..." eternos.
 - **Provisioning script**: El script de bash descargado por CodeBuild necesita Node ≥ 20, PHP, Composer y AWS CLI. Usa `runtime-versions: nodejs latest` en el buildspec generado por SBT, y el script instala PHP/Composer vía apt si no están presentes.
+- **Bref Console payload format**: El Lambda artisan de Bref espera `{"cli":"comando --args"}` (NO `{"command":"..."}`). El formato `command` es ignorado silenciosamente (retorna help text sin error). El provision script y las reglas de EventBridge deben usar `cli`.
+- **Artifact bucket versionado**: `s3://<account>-artifacts-bucket/tenant-app/<version>/app.zip`. El versionado permite desplegar múltiples versiones de la app tenant. Bump `tenantInfraVersion` en `cdk.json` al publicar una nueva versión.
+- **SSM Parameter Store** (`/sbt-demo-ehr/`): Namespace aislado para referencias cross-stack: `hosted-zone-id`, `root-domain`, `wildcard-certificate-arn` (DnsFoundation → AppPlane), `event-bus-name` (ControlPlane → AppPlane), `artifacts-bucket-name`, `tenant-infra-version` (AppPlane → CodeBuild). CodeBuild no puede recibir props de CDK, por eso usa SSM como puente.
 
 ## Costos
 
 - Control Plane (sin tenants activos): ~$15-20/mes (Lambdas, API Gateway, DynamoDB, CloudFront, S3)
-- Cada tenant activo: ~$52/mes (Aurora MySQL, NAT instance, Lambda, S3, Cognito)
+- Cada tenant activo: ~$52/mes (Aurora MySQL, NAT Gateway, Lambda, S3, Cognito)
 - El provisioning/deprovisioning usa CodeBuild bajo demanda (~$0.005/min, típicamente < $2 por operación)
 
 ## Teardown
