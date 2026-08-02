@@ -31,7 +31,7 @@ export class TenantFeatureService extends Construct {
     this.handler = new lambdaNodejs.NodejsFunction(this, 'Handler', {
       entry: path.join(__dirname, '../../src/feature-service/handler.ts'),
       handler: 'handler',
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: lambda.Runtime.NODEJS_24_X,
       bundling: { minify: true },
       environment: {
         TABLE_NAME: table.tableName,
