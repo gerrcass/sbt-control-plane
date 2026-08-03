@@ -19,7 +19,7 @@ Plano de control del demo SaaS EHR. Orquesta el onboarding de tenants, gestiona 
 ┌─ AppPlaneStack ───────────┼──────────────────────────────────┐
 │  sbt.CoreApplicationPlane + ProvisioningScriptJob            │
 │    (CodeBuild → cdk deploy EhrTenantStack-<id>)              │
-│  + DeprovisioningScriptJob (CodeBuild → cdk destroy)         │
+│  + DeprovisioningScriptJob (CodeBuild → delete-stack)         │
 │  S3 artifacts bucket + SSM → /sbt-demo-ehr/artifacts-bucket  │
 └────────────────────────────┼──────────────────────────────────┘
 ┌─ AdminPortalStack ────────┼──────────────────────────────────┐
@@ -70,7 +70,7 @@ bash scripts/write-portal-config.sh
 
 1. Abrir `https://admin.pruebas.aws.gerardocastillo.me` → login con Cognito (credenciales del email configurado, cambiar contraseña al primer ingreso).
 2. **Nuevo tenant** → nombre "Clínica Alfa", email del admin, plan "Básico".
-3. Esperar ~15-20 min (provisionamiento: VPC + Aurora + Cognito + Lambda).
+3. Esperar ~10-15 min (provisionamiento: VPC + Aurora + Cognito + Lambda).
 4. El tenant aparece como "Activo" con su URL `https://clinica-alfa-xxxxx.pruebas.aws.gerardocastillo.me`.
 5. Hacer clic en **Gestionar** → cambiar plan o activar una anulación personalizada (ej. `Telemedicina` para un tenant Core).
 6. En segundos, el módulo de Telemedicina aparece en el EHR del tenant.
@@ -90,10 +90,12 @@ La Feature Service emite este evento al bus de SBT cada vez que un administrador
 - **Portal config.json**: Se inyecta después del deploy con `scripts/write-portal-config.sh`. No incluir `config.json` en el `aws s3 sync --delete` del portal o se borrará.
 - **API Gateway doble slash**: El `apiUrl` del Control Plane incluye `/` al final. El portal debe hacer `apiUrl.replace(/\/+$/, '')` antes de concatenar con el path.
 - **Portal error handling**: Las llamadas a la API deben tener manejo de errores (`.catch`) para evitar estados "Cargando..." eternos.
-- **Provisioning script**: El script de bash descargado por CodeBuild necesita Node ≥ 20, PHP, Composer y AWS CLI. Usa `runtime-versions: nodejs latest` en el buildspec generado por SBT, y el script instala PHP/Composer vía apt si no están presentes.
+- **Provisioning script**: The bash script run by CodeBuild needs Node ≥ 20 and AWS CLI. PHP and Composer are NOT required — the tenant app artifact includes pre-bundled vendor dependencies. The deprovisioning script uses `aws cloudformation delete-stack` directly (not `npx cdk destroy`) to avoid CDK context issues.
 - **Bref Console payload format**: El Lambda artisan de Bref espera `{"cli":"comando --args"}` (NO `{"command":"..."}`). El formato `command` es ignorado silenciosamente (retorna help text sin error). El provision script y las reglas de EventBridge deben usar `cli`.
 - **Artifact bucket versionado**: `s3://<account>-artifacts-bucket/tenant-app/<version>/app.zip`. El versionado permite desplegar múltiples versiones de la app tenant. Bump `tenantInfraVersion` en `cdk.json` al publicar una nueva versión.
 - **SSM Parameter Store** (`/sbt-demo-ehr/`): Namespace aislado para referencias cross-stack: `hosted-zone-id`, `root-domain`, `wildcard-certificate-arn` (DnsFoundation → AppPlane), `event-bus-name` (ControlPlane → AppPlane), `artifacts-bucket-name`, `tenant-infra-version` (AppPlane → CodeBuild). CodeBuild no puede recibir props de CDK, por eso usa SSM como puente.
+- **Bref + Pennant incompatibility**: The tenant app works around a Pennant/Bref FPM Lambda issue (see `ehr-tenant-app/AGENTS.md` § Architecture Rule 3 for details). Feature reads use a direct DB query; the sync command still writes via `Feature::activate()`.
+- **SBT EventBridge callback**: SBT sets up OAuth machine-to-machine credentials for the EventBridge → ControlPlane API connection (tenant registration status updates). The connection is AUTHORIZED and functional — "En progreso" status is typically a timing issue, not an auth failure.
 
 ## Costos
 

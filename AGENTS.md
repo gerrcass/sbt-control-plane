@@ -14,8 +14,8 @@ Control plane for the multi-tenant EHR SaaS demo. Uses AWS SaaS Builder Toolkit 
 │   └── admin-portal-stack.ts       # S3 + CloudFront + Route53 alias
 ├── src/feature-service/handler.ts   # Lambda: GET/PUT tenant-features, emits EventBridge
 ├── scripts/
-│   ├── provision-tenant.sh          # CodeBuild bash: bootstrap Node/PHP, cdk deploy
-│   ├── deprovision-tenant.sh        # CodeBuild bash: cdk destroy
+│   ├── provision-tenant.sh          # CodeBuild bash: Node.js setup, download artifact, cdk deploy
+│   ├── deprovision-tenant.sh        # CodeBuild bash: aws cloudformation delete-stack
 │   └── write-portal-config.sh       # Upload config.json to portal bucket
 ├── portal/                          # Vite + React 18 + Tailwind (Spanish)
 │   ├── src/pages/{TenantsPage,OnboardPage,TenantDetailPage,LoginPage}.tsx
@@ -40,8 +40,8 @@ npm --prefix portal run build   # Portal build → portal/dist/
 2. **Never SSM lookups at synth** — cross-stack references use object props, not SSM. SSM is for runtime (provisioning shell scripts read params with `aws ssm`).
 3. **UI Spanish, code English** — Portal pages use Spanish labels; all TS/JS use English.
 4. **Admin email** is REQUIRED as CDK context (`--context adminEmail=...`). Default in `cdk.json`.
-5. **Provisioning script** is `scripts/provision-tenant.sh`. It boots Node 20 + PHP + Composer, downloads the tenant app artifact, runs `cdk deploy`, creates the tenant admin Cognito user, and invokes the artisan Lambda for migrations + initial feature sync.
-6. **Deprovisioning script** empties the S3 bucket then runs `cdk destroy --force`.
+5. **Provisioning script** is `scripts/provision-tenant.sh`. It sets up Node.js, downloads the tenant app artifact from S3, runs `package-app.sh` (which skips composer now that vendor is pre-bundled), installs CDK deps, deploys the tenant CDK stack, creates the tenant admin Cognito user, and invokes the artisan Lambda for migrations + initial feature sync. Does NOT require PHP or Composer in the CodeBuild image.
+6. **Deprovisioning script** uses `aws cloudformation delete-stack` directly (not `npx cdk destroy`), avoiding CDK context issues during automated teardown.
 7. **DEMO-ONLY permissions**: the provisioning CodeBuild role has `actions:* resources:*`. Replace with least privilege for production.
 8. **Event bus**: SBT creates a custom event bus. Bus name is written to SSM `/sbt-demo-ehr/event-bus-name`. The tenant stack reads it from context (provisioning passes it).
 9. **Custom event** `TenantFeatureUpdated` is emitted by the feature-service Lambda (source: `controlPlaneEventSource`). Detail: `{tenantId, tier, overridesB64}` where `overridesB64` = base64(JSON array of feature keys).
@@ -49,6 +49,8 @@ npm --prefix portal run build   # Portal build → portal/dist/
 11. **CORS**: The ControlPlane API needs `apiCorsConfig` allowing the admin portal origin (`https://admin.pruebas.aws.gerardocastillo.me`). Without this, browser requests fail silently.
 12. **Portal API client**: The control plane API URL has a trailing `/`. The portal `api()` function must strip it before concatenating paths: `apiUrl.replace(/\/+$/, '') + path`. Always handle errors with `.catch()` to avoid eternal loading states.
 13. **Portal config.json**: After `aws s3 sync --delete` on the portal bucket, `config.json` is DELETED. Run `scripts/write-portal-config.sh` to restore it.
+14. **SBT EventBridge → API callback works**: SBT sets up a machine-to-machine OAuth connection (`client_credentials` grant) between EventBridge and the ControlPlane API for updating `registrationStatus`. The connection shows as AUTHORIZED. Tenant status showing "En progreso" is typically a timing issue, not an auth failure.
+15. **Provisioning payload format**: The tenant app's Bref Console Lambda expects `{"cli":"..."}`, NOT `{"command":"..."}`. The EventBridge input template and provision-tenant.sh both use the correct `cli` key.
 
 ## Feature Catalog
 The tier matrix is **duplicated** in both `src/feature-service/handler.ts` (for the admin portal display) and `ehr-tenant-app/config/features.php` (source of truth). If you change the matrix, update both places.
