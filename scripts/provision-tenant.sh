@@ -4,7 +4,7 @@ set -euo pipefail
 echo "========== Provisioning tenant: ${tenantId} (${tenantName}) tier=${tier} =========="
 
 # ------------------------------------------------------------------
-# 1. Toolchain
+# 1. Toolchain (Node.js only — vendor is pre-bundled in the artifact)
 # ------------------------------------------------------------------
 if ! brew --version >/dev/null 2>&1 && ! npx --version >/dev/null 2>&1; then
   echo "No Node found — installing Node 20"
@@ -13,13 +13,6 @@ if ! brew --version >/dev/null 2>&1 && ! npx --version >/dev/null 2>&1; then
 fi
 if ! node --version | grep -q 'v2[0-9]'; then
   npm install -g n && n 20 && hash -r
-fi
-
-if ! command -v php >/dev/null 2>&1; then
-  apt-get update -y && apt-get install -y php-cli php-xml php-mbstring php-curl php-zip unzip
-fi
-if ! command -v composer >/dev/null 2>&1; then
-  curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 fi
 
 # ------------------------------------------------------------------
